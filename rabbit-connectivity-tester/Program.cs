@@ -30,54 +30,66 @@ namespace rabbit_connectivity_tester
         {
             var logger = LogManager.GetCurrentClassLogger();
             logger.Info("Logging is initialised");
-
-            try
+            
+            bool TestConnection(bool useTls)
             {
-                logger.Info($"Attempting to connect to amqps://{username}:****@{hostName}/{virtualHost}");
-
-                var connectionFactory = new ConnectionFactory
+                try
                 {
-                    UserName = username,
-                    Password = password,
-                    HostName = hostName,
-                    VirtualHost = virtualHost,
-                    ClientProvidedName = "Rabbit Connectivity Checker"
-                };
-                var connection = connectionFactory.CreateConnection();
-                connection.ConnectionBlocked += (sender, eventArgs) => logger.Warn($"Connection is blocked:{eventArgs.Reason}");
-                connection.CallbackException += (sender, eventArgs) => logger.Warn(eventArgs.Exception, $"Connection Exception:{eventArgs.Exception.Message}");
-                connection.ConnectionUnblocked += (sender, eventArgs) => logger.Info($"Connection is unblocked");
-                connection.ConnectionShutdown += (sender, eventArgs) => logger.Info($"Connection is shutting down:{eventArgs.ReplyText}");
-                
-                logger.Info($"Is connection open:{connection.IsOpen}");
+                    if(useTls)
+                        logger.Info("Testing secure connection (port 5671)");
+                    else
+                        logger.Info("Testing insecure connection (port 5672)");
+                    
+                    logger.Info($"Attempting to connect to amqp{(useTls ? "s" :"")}://{username}:****@{hostName}/{virtualHost}");
 
-                logger.Info("Opening channel");
-                var channel = connection.CreateModel();
-                
-                channel.CallbackException += (sender, eventArgs) => logger.Warn(eventArgs.Exception, $"Channel Exception:{eventArgs.Exception.Message}");
-                channel.ModelShutdown += (sender, eventArgs) => logger.Info($"Channel is shutting down:{eventArgs.ReplyText}");
-                
-                logger.Info($"Is Channel Open:{channel.IsOpen}");
-                
-                logger.Info("Closing channel");
-                channel.Close();
-                
-                logger.Info("Closing connection");
-                connection.Close();
-            }
-            catch (Exception ex)
-            {
-                // NLog: catch any exception and log it.
-                logger.Error(ex, "Stopped program because of exception", ex);
-                return 1;
-            }
-            finally
-            {
-                // Ensure to flush and stop internal timers/threads before application-exit (Avoid segmentation fault on Linux)
-                LogManager.Shutdown();
-            }
+                    var connectionFactory = new ConnectionFactory
+                    {
+                        Uri = new Uri($"amqp{(useTls ? "s" :"")}://{username}:{password}@{hostName}/{virtualHost}")
+                    };
+                    
+                    var connection = connectionFactory.CreateConnection();
+                    connection.ConnectionBlocked += (sender, eventArgs) => logger.Warn($"Connection is blocked:{eventArgs.Reason}");
+                    connection.CallbackException += (sender, eventArgs) => logger.Warn(eventArgs.Exception, $"Connection Exception:{eventArgs.Exception.Message}");
+                    connection.ConnectionUnblocked += (sender, eventArgs) => logger.Info($"Connection is unblocked");
+                    connection.ConnectionShutdown += (sender, eventArgs) => logger.Info($"Connection is shutting down:{eventArgs.ReplyText}");
+                    
+                    logger.Info($"Is connection open:{connection.IsOpen}");
 
-            return 0;        
+                    logger.Info("Opening channel");
+                    var channel = connection.CreateModel();
+                    
+                    channel.CallbackException += (sender, eventArgs) => logger.Warn(eventArgs.Exception, $"Channel Exception:{eventArgs.Exception.Message}");
+                    channel.ModelShutdown += (sender, eventArgs) => logger.Info($"Channel is shutting down:{eventArgs.ReplyText}");
+                    
+                    logger.Info($"Is Channel Open:{channel.IsOpen}");
+                    
+                    logger.Info("Closing channel");
+                    channel.Close();
+                    
+                    logger.Info("Closing connection");
+                    connection.Close();
+                }
+                catch (Exception ex)
+                {
+                    // NLog: catch any exception and log it.
+                    logger.Error(ex, "Test failed because of exception", ex);
+                    return false;
+                }
+
+                return true;
+            }
+            
+
+            var result = TestConnection(true);
+            if (!result)
+            {
+                logger.Info("Secure connection failed .. testing insecure connection (port 15671)");
+                result = TestConnection(false);
+            }
+            
+            LogManager.Shutdown();
+
+            return result ? 0 : 1;
         }
     }
 }
