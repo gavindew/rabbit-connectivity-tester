@@ -1,0 +1,50 @@
+name: .NET
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v2
+      with:
+        dotnet-version: 6.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build win-x64
+      run: dotnet publish --no-restore -c Release -r win-x64 --self-contained /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishTrimmed=true -o ./publish/win-x64
+    - name: Build linux-x64
+      run: dotnet publish --no-restore -c Release -r linux-x64 --self-contained /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:PublishTrimmed=true -o ./publish/linux-x64
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          Changes in this Release
+          - Upgrade to dotnet 6
+          - Add readme documentation
+        draft: false
+        prerelease: false
+    - name: Upload win-x64 files
+      uses: actions/upload-artifact@v3
+      with:
+        name: win-x64
+        path: ./publish/win-x64
+        if-no-files-found: error
+    - name: Upload linux-x64 files
+      uses: actions/upload-artifact@v3
+      with:
+        name: win-x64
+        path: ./publish/linux-x64
+        if-no-files-found: error
+      
